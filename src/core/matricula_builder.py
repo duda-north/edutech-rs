@@ -1,4 +1,4 @@
-"""Builder — constrói requisições de matrícula passo a passo."""
+"""Builder — monta a requisição de matrícula."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -87,7 +87,7 @@ class MatriculaBuilder:
         )
 
     def _resolver_isolamento(self) -> tuple[str, str]:
-        """RN02 — Isolamento por instituição."""
+        """RN02 — cada instituição tem SO e banco separado."""
         if self._instituicao == Instituicao.UNISENAC and self._curso == Curso.ADS:
             return "Linux", "db_unisenac_encrypted"
         if self._instituicao == Instituicao.IFSUL and self._curso == Curso.TII:

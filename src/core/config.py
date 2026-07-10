@@ -1,4 +1,4 @@
-"""Singleton — ConfigManager centraliza configurações da aplicação."""
+"""Singleton — centraliza config da aplicação."""
 from __future__ import annotations
 
 import os
@@ -30,6 +30,6 @@ class ConfigManager:
 
     @classmethod
     def reset_for_tests(cls) -> None:
-        """Permite reset em testes unitários."""
+        """Só uso nos testes."""
         with cls._lock:
             cls._instance = None

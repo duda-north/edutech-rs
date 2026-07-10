@@ -1,4 +1,4 @@
-"""Factory Method — cria gateways de pagamento (Cielo/Rede)."""
+"""Factory Method — gateways Cielo e Rede."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -30,7 +30,7 @@ class PaymentGateway(ABC):
 class CieloGateway(PaymentGateway):
     def process(self, amount: float, card_token: str) -> PaymentResult:
         start = time.perf_counter()
-        # Simula latência variável do gateway externo
+        # simula latência do gateway
         time.sleep(random.uniform(0.1, 0.5))
         latency = (time.perf_counter() - start) * 1000
         return PaymentResult(

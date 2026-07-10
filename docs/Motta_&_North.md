@@ -2,8 +2,8 @@
 
 **Disciplina:** Engenharia de Software II  
 **Professor:** Prof. Me. Fábio Giulian Marques  
-**Aluno(a):** _[PREENCHA SEU NOME]_  
-**Data:** Julho/2026
+**Alunos:** Pedro Motta & Eduarda North  
+**Data:** 10/07/2026
 
 ---
 
@@ -18,18 +18,17 @@
 7. [Pipeline CI/CD](#7-pipeline-cicd)
 8. [Observabilidade — Logs, Métricas e Traces](#8-observabilidade--logs-métricas-e-traces)
 9. [Padrões GoF Integrados](#9-padrões-gof-integrados)
-10. [Defesa Técnica — Roteiro para Banca](#10-defesa-técnica--roteiro-para-banca)
+10. [Considerações Finais](#10-considerações-finais)
 
 ---
 
 ## 1. Visão Geral
 
-A EduTech-RS evoluiu de um sistema monolítico (Projeto 1) para uma **arquitetura orientada a eventos** com processamento assíncrono, isolamento multi-tenant e observabilidade completa. O arquiteto decidiu **sacrificar a resposta síncrona imediata** (RN01) em favor da **resiliência e disponibilidade** — o aluno recebe status "Processando Matrícula" em vez de esperar o gateway de pagamento.
+Este trabalho documenta a evolução da EduTech-RS depois do Projeto 1. Lá a gente tinha focado nos padrões GoF no código; agora o desafio era pensar em como o sistema roda de verdade — deploy, fila, monitoramento.
 
-### Decisão Arquitetural Principal (AD-01)
+A principal decisão que tomamos foi na RN01: quando o pagamento demora mais de 3 segundos, o aluno não fica esperando na tela. O sistema devolve "Processando Matrícula" e joga a cobrança numa fila pra processar depois. Fizemos assim porque a Cielo/Rede é serviço de terceiro e, pelas aulas, depender de API externa em tempo real é pedir problema.
 
-> **Timeout de 3 segundos no gateway → enfileiramento assíncrono.**  
-> Justificativa: gateways externos (Cielo/Rede) têm SLA variável. Bloquear o aluno por 10–30s degrada a experiência e aumenta timeout de conexão no load balancer. A fila garante que nenhuma matrícula seja perdida.
+Outro ponto que definimos juntos foi separar a infra do UNISENAC e do IFSUL (RN02), já que cada um tem SO diferente pro laboratório e os dados de faturamento não podem se misturar.
 
 ---
 
@@ -290,16 +289,11 @@ Os dados de faturamento **nunca compartilham** a mesma instância de banco. O `M
 
 ## 6. Estratégia de Branching — GitFlow
 
-### Por que GitFlow (e não Trunk-based)?
+### Por que escolhi GitFlow
 
-| Critério | GitFlow ✅ | Trunk-based |
-|----------|-----------|-------------|
-| Equipe pequena (dupla) | Ideal — branches isoladas | Exige feature flags maduras |
-| Releases versionadas | `release/*` com tag semântica | Deploy contínuo diário |
-| Hotfix em produção | `hotfix/*` sem afetar develop | Possível, mas arriscado |
-| Maturidade DevOps da startup | Em crescimento — GitFlow dá segurança | Requer cultura madura |
+A gente pesquisou Trunk-based também, mas pro cenário da EduTech-RS o GitFlow fez mais sentido. A startup ainda não tem cultura de deploy todo dia, e precisávamos de branches separadas — uma pra fila assíncrona (RN01) e outra pra observabilidade — sem quebrar o que já funcionava na `develop`.
 
-**Decisão:** GitFlow, pois a EduTech-RS está em fase de crescimento com releases quinzenais e necessidade de hotfixes sem derrubar homologação.
+Com GitFlow fazemos `feature/*` pra cada parte, mergeamos na `develop`, e só quando está estável mandamos pra `main`. Se der problema em produção, abrimos um `hotfix/*` sem bagunçar o resto. Pra dupla de devs achamos mais seguro do que commitar direto na trunk.
 
 ### Estrutura de Branches
 
@@ -407,13 +401,11 @@ graph LR
     T1 --> T2
 ```
 
-### Cenário de Desastre — Defesa para Banca
+### O que acontece se a Cielo começar a falhar
 
-**Pergunta do professor:** *"Se a API da Cielo começar a falhar intermitentemente com erros 500, como a observabilidade alerta Ops?"*
+Pensamos nesse cenário porque o enunciado fala em resiliência. Se a API da Cielo começar a retornar 500 de forma intermitente, nossa estrutura reagiria assim:
 
-**Resposta estruturada:**
-
-1. **Métricas (detecção em < 1 min):**
+1. **Métricas:**
    - `edutech_payment_errors_total{gateway="cielo", error_type="HTTPError"}` incrementa
    - `edutech_payment_latency_seconds` bucket `> 3.0` dispara
    - Alerta Grafana: `rate(payment_errors_total[5m]) > 0.1` → PagerDuty/Slack
@@ -471,35 +463,12 @@ O acoplamento é **unidirecional**: API → Services → Core (GoF) → Infrastr
 
 ---
 
-## 10. Defesa Técnica — Roteiro para Banca
+## 10. Considerações Finais
 
-### Pergunta 1: Rastreabilidade Componente → Pipeline
+Montamos a pipeline de CI/CD pra garantir que nada vai pra homologação sem passar nos testes (RN04). O `MatriculaService` que aparece no diagrama de componentes é o mesmo que está em `payment_worker.py` — e tem teste cobrindo o timeout da RN01. Se a gente quebrar isso sem querer, o deploy nem roda.
 
-> "Como o MatriculaService do diagrama se reflete no Build?"
+Reaproveitamos os padrões do Projeto 1 (Singleton, Factory e Builder) porque já estavam funcionando e encaixaram bem na nova estrutura sem precisar reescrever tudo.
 
-O `MatriculaService` está em `src/workers/payment_worker.py`. O job **Test** da pipeline executa `pytest` que inclui `test_timeout_enfileira_matricula` — testando diretamente o RN01 desse componente. Se o componente quebrar, o deploy é bloqueado.
+**Divisão do trabalho:** Pedro ficou com a pipeline CI/CD, diagramas de implantação e observabilidade (métricas/logs). Eduarda ficou com o código core (GoF), fila assíncrona (RN01) e diagrama de sequência.
 
-### Pergunta 2: Por que GitFlow?
-
-A startup tem releases quinzenais, dupla de devs, e precisa de hotfix sem afetar develop. Trunk-based exigiria feature flags e deploy diário — over-engineering para o estágio atual.
-
-### Pergunta 3: Cenário Cielo 500
-
-Ver seção 8 — Métricas detectam, Logs diagnosticam, Traces localizam, RN01 protege o aluno com fila assíncrona.
-
-### Pergunta 4: Por que sacrificar resposta síncrona? (RN01)
-
-- **Disponibilidade > Consistência imediata** (teorema CAP)
-- Aluno não fica com tela travada por 30s
-- Nenhuma matrícula é perdida (fila persistente)
-- Gateway externo é ponto de falha fora do nosso controle
-
----
-
-## Repositório
-
-**Link:** _[INSIRA O LINK DO SEU REPOSITÓRIO GITHUB AQUI]_
-
----
-
-*Documento gerado para o Projeto Prático Integrado A — EduTech-RS. Uso de IA autorizado conforme diretriz da disciplina; decisões arquiteturais são de responsabilidade do aluno.*
+Repositório: https://github.com/duda-north/edutech-rs
