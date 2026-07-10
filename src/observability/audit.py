@@ -1,4 +1,4 @@
-"""RN03 — Logs de auditoria imutáveis com abort em falha."""
+"""Logs de auditoria estruturados (Dimensão 3)."""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,7 @@ from src.core.config import ConfigManager
 
 
 class AuditLogFailure(Exception):
-    """Lançada quando a gravação do log de auditoria falha (RN03)."""
+    """Lançada quando a gravação do log de auditoria falha."""
 
 
 @dataclass(frozen=True)

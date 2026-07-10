@@ -1,3 +1,5 @@
+# Opcional — integração Prometheus + Grafana (Dimensão 3)
+# Suba a API antes: uvicorn src.api.main:app --reload
 services:
   prometheus:
     image: prom/prometheus:v2.51.0
