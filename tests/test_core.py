@@ -1,4 +1,6 @@
 """Testes unitários — cobertura mínima 80% (RN04)."""
+from unittest.mock import patch
+
 import pytest
 
 from src.core.config import ConfigManager
@@ -40,6 +42,13 @@ class TestFactoryMethod:
         result = gw.process(50.0, "tok_456")
         assert result.success
         assert "REDE" in result.transaction_id
+
+    def test_cria_gateway_slow(self):
+        gw = PaymentGatewayFactory.create(GatewayType.SLOW)
+        with patch("src.core.payment_factory.time.sleep"):
+            result = gw.process(100.0, "tok_slow")
+        assert not result.success
+        assert result.latency_ms == 4000
 
 
 class TestBuilder:
@@ -90,9 +99,14 @@ class TestRN01Async:
             .com_ip("10.0.0.1")
             .build()
         )
-        resultado = service.iniciar_matricula(
-            matricula, process_sync=lambda: "timeout"
-        )
+        with patch("src.core.payment_factory.time.sleep"):
+            with patch(
+                "src.workers.payment_worker.time.perf_counter",
+                side_effect=[0.0, 4.5],
+            ):
+                resultado = service.iniciar_matricula(
+                    matricula, gateway=GatewayType.SLOW
+                )
         assert resultado.status == StatusMatricula.PROCESSANDO
         assert queue.size() == 1
 

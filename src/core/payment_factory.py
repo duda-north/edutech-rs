@@ -11,6 +11,7 @@ import random
 class GatewayType(str, Enum):
     CIELO = "cielo"
     REDE = "rede"
+    SLOW = "slow"
 
 
 @dataclass
@@ -74,4 +75,6 @@ class PaymentGatewayFactory:
             return CieloGateway()
         if gateway_type == GatewayType.REDE:
             return RedeGateway()
+        if gateway_type == GatewayType.SLOW:
+            return SlowGateway()
         raise ValueError(f"Gateway desconhecido: {gateway_type}")

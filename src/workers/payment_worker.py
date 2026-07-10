@@ -92,7 +92,8 @@ class MatriculaService:
             )
 
             if process_sync:
-                result = process_sync()
+                with trace_span("pagamento.sincrono", {"gateway": gateway.value}):
+                    result = process_sync()
             else:
                 result = self._tentar_pagamento_sincrono(matricula, gateway)
 
