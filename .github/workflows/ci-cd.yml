@@ -1,0 +1,120 @@
+name: EduTech-RS CI/CD Pipeline
+
+# RN04 — Nenhum deploy sem testes >= 80% e sem credenciais expostas
+on:
+  push:
+    branches: [main, develop, "feature/**", "release/**", "hotfix/**"]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: "3.12"
+  MIN_COVERAGE: "80"
+
+jobs:
+  # ── Etapa 1: BUILD ──────────────────────────────────────────
+  build:
+    name: "1. Build — Validação do Ambiente"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validar estrutura do projeto
+        run: |
+          test -f src/api/main.py
+          test -f src/core/config.py
+          test -f src/workers/payment_worker.py
+          echo "✅ Estrutura validada"
+
+  # ── Etapa 2: TEST ───────────────────────────────────────────
+  test:
+    name: "2. Test — Testes Unitários + Cobertura"
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Executar testes com cobertura mínima ${{ env.MIN_COVERAGE }}%
+        run: pytest --cov=src --cov-report=xml --cov-fail-under=${{ env.MIN_COVERAGE }}
+
+      - name: Upload cobertura
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  # ── Gate de Segurança (RN04) ────────────────────────────────
+  security-scan:
+    name: "2b. Security — Scan de Credenciais"
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detectar credenciais expostas
+        run: |
+          echo "🔍 Verificando padrões de credenciais..."
+          if grep -rEn "(password|secret|api_key|token)\s*=\s*['\"][^'\"]+['\"]" src/ --include="*.py" | grep -v "card_token\|tok_\|test\|example"; then
+            echo "❌ Credencial sensível detectada no código!"
+            exit 1
+          fi
+          if grep -rE "AKIA[0-9A-Z]{16}" . 2>/dev/null; then
+            echo "❌ AWS Key detectada!"
+            exit 1
+          fi
+          echo "✅ Nenhuma credencial exposta"
+
+  # ── Etapa 3: DEPLOY ─────────────────────────────────────────
+  deploy:
+    name: "3. Deploy — Homologação"
+    needs: [test, security-scan]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    environment: homologacao
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Simular deploy em homologação
+        run: |
+          echo "🚀 Deploy simulado para ambiente de homologação"
+          echo "   Branch: ${{ github.ref_name }}"
+          echo "   Commit: ${{ github.sha }}"
+          python -c "from src.api.main import app; print(f'App: {app.title} v{app.version}')"
+          echo "✅ Deploy concluído com sucesso"
+
+      - name: Smoke test pós-deploy
+        run: |
+          python -c "
+          from fastapi.testclient import TestClient
+          from src.api.main import app
+          c = TestClient(app)
+          r = c.get('/health')
+          assert r.status_code == 200, 'Health check falhou'
+          print('✅ Smoke test OK')
+          "
