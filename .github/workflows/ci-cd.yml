@@ -34,7 +34,7 @@ jobs:
           test -f src/api/main.py
           test -f src/core/config.py
           test -f src/workers/payment_worker.py
-          echo "✅ Estrutura validada"
+          echo " Estrutura validada"
 
   # ── Etapa 2: TEST ───────────────────────────────────────────
   test:
@@ -71,16 +71,16 @@ jobs:
 
       - name: Detectar credenciais expostas
         run: |
-          echo "🔍 Verificando padrões de credenciais..."
+          echo " Verificando padrões de credenciais..."
           if grep -rEn "(password|secret|api_key|token)\s*=\s*['\"][^'\"]+['\"]" src/ --include="*.py" | grep -v "card_token\|tok_\|test\|example"; then
-            echo "❌ Credencial sensível detectada no código!"
+            echo " Credencial sensível detectada no código!"
             exit 1
           fi
           if grep -rE "AKIA[0-9A-Z]{16}" . 2>/dev/null; then
-            echo "❌ AWS Key detectada!"
+            echo " AWS Key detectada!"
             exit 1
           fi
-          echo "✅ Nenhuma credencial exposta"
+          echo " Nenhuma credencial exposta"
 
   # ── Etapa 3: DEPLOY ─────────────────────────────────────────
   deploy:
@@ -102,11 +102,11 @@ jobs:
 
       - name: Simular deploy em homologação
         run: |
-          echo "🚀 Deploy simulado para ambiente de homologação"
+          echo "Deploy simulado para ambiente de homologação"
           echo "   Branch: ${{ github.ref_name }}"
           echo "   Commit: ${{ github.sha }}"
           python -c "from src.api.main import app; print(f'App: {app.title} v{app.version}')"
-          echo "✅ Deploy concluído com sucesso"
+          echo " Deploy concluído com sucesso"
 
       - name: Smoke test pós-deploy
         run: |
@@ -116,5 +116,8 @@ jobs:
           c = TestClient(app)
           r = c.get('/health')
           assert r.status_code == 200, 'Health check falhou'
-          print('✅ Smoke test OK')
+          m = c.get('/metrics')
+          assert m.status_code == 200, 'Metrics falhou'
+          assert 'edutech_payment_latency_seconds' in m.text
+          print(' Smoke test OK (health + metrics)')
           "
