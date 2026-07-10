@@ -1,0 +1,13 @@
+# Patterns
+__pycache__/
+*.py[cod]
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.env
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
